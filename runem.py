@@ -9,6 +9,9 @@ import sys
 import os.path
 import subprocess
 import shutil
+import smtplib
+from email.mime.text import MIMEText
+import re
 #from optparse import OptionParser,make_option
 #
 #option_list = [
@@ -19,6 +22,47 @@ import shutil
 #options,args = parser.parse_args()
 #print(args)
 
+def getmail():
+	"""get user email if ~/.runem is exist"""
+	setting = ".runem"
+	filefullname = os.path.expanduser("~") + "/" + setting
+	mailfile = None
+	mail = ""
+	try:
+		mailfile = open(filefullname, mode="r")
+		mail = mailfile.readline()
+	except IOError:
+		pass
+	finally:
+		if mailfile is not None:
+			mailfile.close()
+	return mail
+
+def sendmail():
+	"""get mail then sendmail"""
+	sender = "lc85301@gmail.com"
+	receiver = getmail()
+
+	if receiver == "":
+		return 0
+	# open smtp session
+	session  = smtplib.SMTP('smtp.gmail.com', 587)
+	session.ehlo
+	session.starttls()
+	session.ehlo
+	session.login(account, password)
+
+	# prepare the send message
+	msg = MIMEText("smtp module test")
+	msg['Subject'] = "the test title"
+	msg['From'] = sender
+	msg['To'] = receiver
+
+	# send the message
+	session.sendmail(sender, [receiver], msg.as_string())
+	session.quit()
+
+sendmail()
 filename = sys.argv[1]
 
 if not filename.endswith(".son"):
