@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 
 ##################################################################################
 #-*- coding: utf-8 -*-
@@ -78,7 +78,7 @@ def sendmail(filename=""):
 
 def startmonitor(filename=""):
 	"""start the monitor process"""
-	pid = getpid()
+	pid = getpid(filename)
 	print(pid)
 	print(filename)
 	# call runem -m to monitor the em process
@@ -107,7 +107,7 @@ def monitor_pid(pid, filename=""):
 def setmail():
 	"""allow user input mail and save into ~/.runem"""
 	setting = ".runem"
-	mail = input("Please input your email address: ")
+	mail = raw_input("Please input your email address: ")
 	filepath = os.path.expanduser("~") + "/" + setting
 	mailfile = None
 	try:
@@ -119,19 +119,20 @@ def setmail():
 		if mailfile is not None:
 			mailfile.close()
 
-def getpid():
+def getpid(filename):
 	"""using ps to find the em simulation pid just called"""
 	username = getusername()
 	pid_list = []
 	# wait 1 second, let ps refresh, and em shows
 	# I once remove sleep and ps -elf didn't get em process LOL
-	cmd = "sleep 1 ;ps -elf"
+	cmd = "sleep 3 ;ps -elf"
 	p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
 	stdout, stderr = p.communicate()
 	#stdout = p.stdout.read().decode("utf-8").split('\n')
 	stdout = stdout.decode("utf-8").split('\n')
 	for line in stdout:
-		if ('em -v' in line) and (username in line) and ("grep" not in line):
+		linesplit = line.split()
+		if (filename in line) and (username in line) and ("grep" not in line):
 			pid_list.append(line.split()[3])
 	# assume the maximum is the em process, need modification
 	return max(pid_list)
@@ -151,7 +152,7 @@ def run_em(filename):
 		sys.exit(1)
 	#the file path of the simulation file
 	pathname = os.path.dirname(os.path.abspath(filename))
-	rawfilename = filename[:-4]
+	rawfilename = os.path.basename(filename)[:-4]
 	print(pathname)
 	print(rawfilename)
 	
@@ -187,4 +188,4 @@ else:
 		sys.exit(1)
 	filename = sys.argv[1]
 	run_em(filename)
-	startmonitor(filename)
+	startmonitor(os.path.basename(filename))
