@@ -31,19 +31,10 @@ import subprocess
 import shutil
 import smtplib
 import getpass
+import time
 from email.mime.text import MIMEText
-import re
-
-# parse option 
-#from optparse import OptionParser,make_option
-#
-#option_list = [
-#	make_option("-s", "--set", action='store',dest='file', default=False)
-#]
-#parser = OptionParser(usage = 'Usage: autoEM [OPTION...] DATA...', option_list=option_list)
-#
-#options,args = parser.parse_args()
-#print(args)
+from optparse import OptionParser,make_option
+from optparse import OptionParser,make_option
 
 def getmail():
 	"""get user email if ~/.runem is exist"""
@@ -61,7 +52,7 @@ def getmail():
 			mailfile.close()
 	return mail
 
-def sendmail(filename):
+def sendmail(filename=""):
 	"""get mail then sendmail"""
 	sender = "lc85301@gmail.com"
 	receiver = getmail()
@@ -76,7 +67,7 @@ def sendmail(filename):
 	session.login(account, password)
 
 	# prepare the send message
-	msg = MIMEText("Your EM simulation of {0} is over. Have a good day.".format())
+	msg = MIMEText("Your EM simulation of {0} is over. Have a good day.".format(filename))
 	msg['Subject'] = "EM simulation is over"
 	msg['From'] = sender
 	msg['To'] = receiver
@@ -85,11 +76,35 @@ def sendmail(filename):
 	session.sendmail(sender, [receiver], msg.as_string())
 	session.quit()
 
-def monitor_pid(pid):
-	"""Monitor a pid, then send message"""
+def startmonitor(filename=""):
+	"""start the monitor process"""
+	pid = getpid()
+	print(pid)
+	print(filename)
+	# call runem -m to monitor the em process
+	cmd = "echo 'runem -m {0} -f {1}'".format(pid, filename)
+	cmd2 = "at now +0 minutes"
+	p1 = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+	p2 = subprocess.Popen(cmd2, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=p1.stdout)
+
+def monitor_pid(pid, filename=""):
+	"""Monitor pid, then send message"""
+	POLL_INTERVAL = 10
+	#: Get process cmdline
+	try:
+		with open("/proc/%d/cmdline" % pid) as f:
+			cmd = f.read().split('\x00')
+	except IOError:
+		self.fatal('process %d does not exists' % pid)
+	while True:
+		try:
+			os.kill(pid, 0)
+		except OSError:
+			break
+		time.sleep(POLL_INTERVAL)
 	sendmail(filename)
 
-def getmail():
+def setmail():
 	"""allow user input mail and save into ~/.runem"""
 	setting = ".runem"
 	mail = input("Please input your email address: ")
@@ -107,39 +122,69 @@ def getmail():
 def getpid():
 	"""using ps to find the em simulation pid just called"""
 	username = getusername()
-	command = "ps -elf ｜ grep 'em -v' | grep {0} | grep [^grep] ｜ tr -s ' ' | cut -d ' ' -f 4 | sort -v".format(username)
-	p = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-	print(p.stdout)
-	return pid
+	pid_list = []
+	# wait 1 second, let ps refresh, and em shows
+	# I once remove sleep and ps -elf didn't get em process LOL
+	cmd = "sleep 1 ;ps -elf"
+	p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+	stdout, stderr = p.communicate()
+	#stdout = p.stdout.read().decode("utf-8").split('\n')
+	stdout = stdout.decode("utf-8").split('\n')
+	for line in stdout:
+		if ('em -v' in line) and (username in line) and ("grep" not in line):
+			pid_list.append(line.split()[3])
+	# assume the maximum is the em process, need modification
+	return max(pid_list)
 
 def getusername():
 	"""get user name, to grep em process"""
 	return getpass.getuser()
 
-#filename = sys.argv[1]
+def run_em(filename):
+	"""run filename em simulation"""
+	if not filename.endswith(".son"):
+		sys.stderr.write("not a valid sonnet simulation file\n")
+		sys.exit(1)
+	
+	if not os.path.isfile(filename):
+		sys.stderr.write("the simulation file doesn't exist\n")
+		sys.exit(1)
+	#the file path of the simulation file
+	pathname = os.path.dirname(os.path.abspath(filename))
+	rawfilename = filename[:-4]
+	print(pathname)
+	print(rawfilename)
+	
+	# if exist, remove the old running log directory
+	# otherwise em will stop simulation
+	setting="{0}/sondata/{1}".format(pathname, rawfilename)
+	if os.path.isdir(setting):
+		shutil.rmtree(setting)
+	
+	# now run the em simulation using em and "at" command
+	cmd = "echo 'em -v {0}'".format(filename)
+	cmd2 = "at now +0 minutes"
+	p1 = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+	p2 = subprocess.Popen(cmd2, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=p1.stdout)
 
-#if not filename.endswith(".son"):
-#	sys.stderr.write("not a valid sonnet simulation file\n")
-#	sys.exit(0)
-#
-#if not os.path.isfile(filename):
-#	sys.stderr.write("the simulation file doesn't exist\n")
-#	sys.exit(0)
-##the file path of the simulation file
-#pathname = os.path.dirname(os.path.abspath(filename))
-#rawfilename = filename[:-4]
-#print(pathname)
-#print(rawfilename)
-#
-## if exist, remove the old running log directory
-## otherwise em will stop simulation
-#setting="{0}/sondata/{1}".format(pathname, rawfilename)
-#if os.path.isdir(setting):
-#	shutil.rmtree(setting)
-#
-## now run the em simulation using em and "at" command
-##command = ["echo","-v {0}".format(filename),"|", "at", "now +1 minutes"]
-#command = "echo 'em -v {0}' | at now +1 minutes".format(filename)
-#p  = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-#p_stdout = p.stdout.read()
-#p_stderr = p.stderr.read()
+# parse option 
+option_list = [
+	make_option("-s", "--set", action='store_true',dest='setmail', default=False, help="set your e-mail address"),
+	make_option("-m", "--monitor", action='store', dest='pid', type=int, default=0, help="monitor process and send mail after process over"),
+	make_option("-f", "--filename", action='store', dest='filename', default="", help="the filename currently running")
+]
+parser = OptionParser(usage = "Usage: runem emfilename", option_list=option_list)
+options,args = parser.parse_args()
+
+if options.setmail:
+	setmail()
+	sys.exit(0)
+elif options.pid != 0:
+	monitor_pid(options.pid, options.filename)
+else:
+	if len(sys.argv) != 2:
+		parser.print_usage()
+		sys.exit(1)
+	filename = sys.argv[1]
+	run_em(filename)
+	startmonitor(filename)
